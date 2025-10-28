@@ -9,8 +9,8 @@ sidebar_position: 4
 By using OIDC, the workflow securely obtains temporary AWS credentials at runtime, removing the need to store permanent access keys in GitHub and ensuring a more secure deployment process.
 
 ---
-## 1. Configure AWS IAM for GitHub OIDC Authentication
-### a. Create the OIDC Identity Provider in AWS IAM
+### 1. Configure AWS IAM for GitHub OIDC Authentication
+#### a. Create the OIDC Identity Provider in AWS IAM
 This provider allows AWS to trust tokens issued by GitHub’s OIDC service.
 
 ```
@@ -22,13 +22,8 @@ resource "aws_iam_openid_connect_provider" "github" {
 - Establishes trust between AWS IAM and GitHub Actions.
 - Enables the `sts:AssumeRoleWithWebIdentity` flow for secure, short-term credentials.
 
-:::important
-The OIDC provider must be created only once per AWS account and region. Creating duplicates can cause IAM role conflicts or deployment errors.
-:::
-
-
-### b. Define IAM Policies and Trust Relationship
-#### Retrieve Remote State (optional)
+#### b. Define IAM Policies and Trust Relationship
+##### Retrieve Remote State (optional)
 
 If this IAM configuration depends on outputs from another Terraform stack (e.g., backend state), reference it via a remote state data block.
 
@@ -43,7 +38,7 @@ data "terraform_remote_state" "s3" {
   }
 }
 ```
-#### Create IAM Policy for S3 Access
+##### Create IAM Policy for S3 Access
 ```
 data "aws_iam_policy_document" "allow_s3_for_ci_cd" {
   statement {
@@ -62,8 +57,7 @@ data "aws_iam_policy_document" "allow_s3_for_ci_cd" {
 ```
 - Allows the workflow to upload (`PutObject`), list, and delete files in the target S3 bucket.
 - Restricts permissions to the specific frontend bucket only.
-
-#### Create the Trust Policy for GitHub Actions
+##### Create the Trust Policy for GitHub Actions
 
 This policy allows GitHub to assume the IAM role using OIDC, limited to a specific repository.
 
@@ -92,16 +86,12 @@ data "aws_iam_policy_document" "assume_ci_cd_role" {
   }
 }
 ```
-- Prevents unauthorized repositories from assuming the role.
 - Grants GitHub Actions permission to assume this role only if the request:
     - Comes from the repository `deeowemez/minicommerce`
     - Targets AWS STS (`aud = sts.amazonaws.com`)        
+- Prevents unauthorized repositories from assuming the role.
 
-:::tip
-You can support multiple repositories by adding more values in the StringLike condition.
-:::
-
-#### Create the IAM Role and Attach Policy
+##### Create the IAM Role and Attach Policy
 ```
 resource "aws_iam_role" "allow_s3_for_ci_cd" {
   name               = "AllowS3ForCICDRole"
@@ -118,10 +108,10 @@ resource "aws_iam_role_policy" "allow_s3_for_ci_cd" {
 - The inline policy grants S3 permissions scoped to the target bucket.
 
 ---
-## 2. Configure GitHub Repository
+### 2. Configure GitHub Repository
 Once the IAM role is created, configure GitHub to use it for deployments.
 
-### a. Add AWS Role ARN to GitHub Secrets
+#### a. Add AWS Role ARN to GitHub Secrets
 
 In your **GitHub repository**:
 1. Go to **Settings → Secrets and variables → Actions**
@@ -129,7 +119,7 @@ In your **GitHub repository**:
 3. Add the following secrets:
     - `FRONTEND_CICD_ROLE` → The ARN of the IAM role created (e.g., `arn:aws:iam::598558968737:role/AllowS3ForCICDRole`)
 
-### b. Update the GitHub Actions Workflow
+#### b. Update the GitHub Actions Workflow
 
 Create or edit `.github/workflows/deploy_s3.yml` to use the OIDC role and deploy to S3.
 ```
@@ -198,10 +188,9 @@ jobs:
 - Builds the frontend using **Node.js 20**, pulling environment variables and secrets from GitHub.
 - Deploys the compiled static files from the `/frontend/dist` directory to the target **S3 bucket**, ensuring synchronization with the latest build.
 - Verifies successful deployment by listing uploaded files in the S3 bucket.
-- The `--delete` flag removes files in the bucket that aren’t in your latest build. This ensures a clean deployment but can delete manually uploaded assets if not version-controlled.
 
 ---
-## 3. Test the CI/CD Deployment
+### 3. Test the CI/CD Deployment
 
 To confirm the pipeline works correctly:
 1. **Commit and push** a change to the `main` branch (e.g., update a small frontend file).
@@ -210,16 +199,9 @@ To confirm the pipeline works correctly:
 
 ![Frontend CI/CD Workflow](./img/frontend-cicd-test.png "frontend-cicd-workflow")
 
-:::tip
-View workflow logs from GitHub Actions to debug failed deployments at specific steps.
-:::
-
 4. Go to the **S3 bucket** in AWS Console and confirm new/updated files exist.
 5. Visit your **CloudFront distribution URL** to verify the latest changes are live.
 
-:::caution
-CloudFront frequently caches content. If updates aren't immediately reflected, invalidate the cache manually or automate invalidations as part of your workflow.
-:::
 
 ---
 ## Reference

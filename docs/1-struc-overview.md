@@ -6,6 +6,8 @@ sidebar_position: 1
 
 ### Directory Structure
 
+This structure organizes Terraform code into reusable modules and environment-specific configurations. It ensures clean separation between backend state, environments, and core infrastructure components.
+
 ```
 .
 ├── backend
@@ -40,13 +42,19 @@ sidebar_position: 1
 
 ## Directory Breakdown
 
-#### **backend**
+### **backend**
 - Contains the configuration for the **remote Terraform state** backend
 - This directory is deployed **once** to bootstrap the remote state infrastructure
-#### **env/**
+- The backend must be deployed **before** any other environment (dev, prod, etc.). Without the remote state bucket in place, Terraform cannot initialize or store state remotely.
+
+### **env/**
 - Manage multiple environments (e.g., `dev`, `integ`, `prod`) using the same module sets with different parameters
-#### **modules/**
+- Extend this pattern by creating additional environments such as (e.g., `staging` or `test`)
+- Ensure each environment uses a unique state key (e.g., `dev/terraform.tfstate`, `prod/terraform.tfstate`) to prevent environments from overwriting each other’s state
+
+### **modules/**
 - Reusable Terraform modules encapsulating core infrastructure components
+- Version-control modules independently by moving them to their own repositories and referencing them via Git URLs or Terraform Registry sources
 
 ---
 ## How It Works Together
@@ -54,61 +62,13 @@ sidebar_position: 1
 1. **Backend** creates the S3 bucket and configures the remote state.
 2. Each **environment** (`dev`, `prod`, etc.) uses that remote state to read outputs and maintain isolation.
 3. **Modules** define reusable components that can be versioned and shared across environments.
-4. The result is a **clean, maintainable, and scalable Terraform setup** aligned with best practices for IaC projects.
+
+:::important
+- Always run terraform init from inside the environment folder (e.g., env/dev/) — not from the project root — so Terraform can load the corresponding backend and module paths.
+- Avoid directly modifying files inside terraform.tfstate or reusing the same state file between environments — this can lead to state corruption.
+:::
 
 ---
-### Sample File
-###### <i>env/dev/main.tf</i>
-```
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 6.0"
-    }
-  }
-  backend "s3" {
-    bucket       = "mc-remote-state"
-    key          = "dev/terraform.tfstate"
-    region       = "us-east-1"
-    use_lockfile = true
-  }
-}
+## Reference
 
-provider "aws" {
-  region = "us-east-1"
-}
-
-provider "aws" {
-  alias  = "use1"
-  region = "us-east-1"
-}
-
-module "frontend_use1" {
-  source                 = "../../modules/frontend"
-  providers              = { aws = aws.use1 }
-  aws_region             = var.aws_region_use1
-  project_name           = "${var.project_name}-${var.aws_region_alias_use1}"
-  db_remote_state_bucket = var.db_remote_state_bucket
-  db_remote_state_key    = var.db_remote_state_key
-}
-
-module "network_use1" {
-  source                 = "../../modules/network"
-  providers              = { aws = aws.use1 }
-  aws_region             = var.aws_region_use1
-  vpc_cidr               = "10.20.0.0/16"
-  project_name           = "${var.project_name}-${var.aws_region_alias_use1}"
-  db_remote_state_bucket = var.db_remote_state_bucket
-  db_remote_state_key    = var.db_remote_state_key
-}
-
-module "iam_use1" {
-  source                 = "../../modules/iam"
-  frontend_bucket_arn    = module.frontend_use1.aws_s3_bucket_arn
-  frontend_bucket_name   = module.frontend_use1.aws_s3_bucket_name
-  aws_region             = var.aws_region_use1
-  db_remote_state_bucket = var.db_remote_state_bucket
-  db_remote_state_key    = var.db_remote_state_key
-}
-```
+- **Github:** [Project Directory Structure](https://github.com/deeowemez/minicommerce/tree/main/infra) | [Environment Sample Configuration File](https://github.com/deeowemez/minicommerce/blob/main/infra/env/dev/main.tf)
