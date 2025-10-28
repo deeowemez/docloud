@@ -12,6 +12,10 @@ However, in collaborative or automated environments (such as CI/CD pipelines), l
 
 To address these issues, Terraform supports **remote state management**.
 
+:::note
+Remote state is especially critical when using CI/CD (e.g., GitHub Actions, Jenkins, or Terraform Cloud) for automation. These systems often run in parallel — without remote state locking, they could overwrite each other’s state changes.
+:::
+
 ---
 ## What Is Remote State Management?
 
@@ -23,14 +27,19 @@ This approach ensures a **single source of truth** for your infrastructure and p
 - **Backup & Security** – Remote backends (like S3) provide versioning, encryption, and durability for your state files.
 - **Automation Ready** – Ensures Terraform runs consistently across environments and systems.
 
+
 ---
 
 ## Remote Backend Infrastructure Setup
 
-To store Terraform state remotely, you must first provision a **storage backend** with an appropriate **locking mechanism**.  
+Before Terraform can store its state remotely, you must provision a backend that provides both persistent storage and a locking mechanism to prevent concurrent operations.
 
-In this example, the state is stored in an **AWS S3 bucket** with **versioning, encryption, and restricted public access**.  
-Previously, **DynamoDB** was commonly used to manage state locks, but AWS now supports **native S3 Object Lock**, which can prevent concurrent writes without requiring DynamoDB.
+In this setup, the Terraform state is stored in an AWS S3 bucket configured with versioning, encryption, and restricted public access. The bucket also uses S3 Object Lock, which ensures immutability and provides basic protection against concurrent writes, reducing the risk of accidental overwrites or deletions—without requiring a DynamoDB table.
+
+:::note
+While S3 Object Lock offers lightweight protection, DynamoDB remains the preferred choice for production-grade Terraform state locking.
+DynamoDB provides explicit lock coordination, visibility, and safe concurrency handling, making it more suitable for environments where multiple users or CI/CD pipelines interact with the same Terraform state.
+:::
 
 ### Provisioning the Remote State Infrastructure
 
@@ -92,7 +101,6 @@ resource "aws_s3_bucket_public_access_block" "remote_state" {
 }
 ```
 
-
 - Completely **blocks public access** to the bucket.
 - Prevents unauthorized read or write operations from public users.
 
@@ -126,17 +134,40 @@ terraform {
 - *region* - AWS region where the S3 bucket is located
 - *use_lockfile* - Enables a lock file to prevent concurrent Terraform operations. Defaults to `false`.
 
+:::tip
+It’s best practice to define your remote backend in the environment-level configuration (e.g., `env/dev/`, `env/prod/`) rather than in shared module directories, to maintain environment isolation.
+:::
+
 ---
 
 ## Testing Remote Backend Setup
+
+:::important
+- The S3 bucket must already exist before running terraform init. Terraform won’t automatically create the bucket when defining a backend.
+- If multiple regions or environments are being managed, use separate keys (e.g., `dev/terraform.tfstate`, `prod/terraform.tfstate`) and enable versioning to track state evolution per environment.
+- Always re-run terraform init after adding or changing the backend block — Terraform needs to reconfigure its connection to the remote state.
+:::
 
 To verify that the remote backend is configured correctly, run the following commands:
 
 ```bash
 terraform init
 terraform plan
+terraform state pull
 ```
 
-If everything is set up properly, the output will confirm that state locking is in use.
+Output should display the remote JSON state file contents — confirming it’s stored in S3.
 
+Output:
+
+![Output](./img/tf-state-output.png "tf-state-output")
+
+Running `terraform plan` and `terraform apply` should also show that state locks are in use.
+
+Output:
 ![Remote State Lock](./img/remote-state-lock.png "remote state lock")
+
+---
+## Reference
+
+- **Github:** [Remote Infrastructure Provisioning](https://github.com/deeowemez/minicommerce/blob/main/infra/backend/main.tf)

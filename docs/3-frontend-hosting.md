@@ -30,7 +30,9 @@ data "terraform_remote_state" "s3" {
   }
 }
 ```
-<sub><i>This block retrieves outputs from the previously configured remote Terraform state stored in S3 bucket `mc-remote-state`, using the specified configuration parameters</i></sub>
+:::note
+Ensure that the bucket, key, and region values match those used in the backend configuration. Inconsistent settings between environments can cause state locking or data drift.
+:::
 
 ---
 ## Infrastructure Provisioning
@@ -194,11 +196,14 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
 - **Viewer Certificate:** Uses CloudFront’s default SSL certificate for simplicity (custom certs can be added later).
 - **WAF and Security Protections:** Not enabled in this configuration to simplify initial deployment; can be integrated later.
 
+:::tip
+If updates to your frontend files don’t appear immediately, invalidate the CloudFront cache using:
+
+`aws cloudfront create-invalidation --distribution-id <ID> --paths "/*"`
+:::
+
 ---
+## Reference
 
-## References
+- **Github:** [Frontend Infrastrucuture Provisioning](https://github.com/deeowemez/minicommerce/blob/main/infra/modules/frontend/main.tf)
 
-- **Full Source:** [Github Link](https://github.com/deeowemez/minicommerce/blob/main/infra/modules/frontend/main.tf)
-- **AWS Docs:**
-    - Using CloudFront Origin Access Control (OAC)
-    - Hosting a Static Website on Amazon S3
